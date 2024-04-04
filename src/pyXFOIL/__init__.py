@@ -5,17 +5,20 @@ import matplotlib.pyplot as plt
 
 class PyXFOIL:
     "Class for an XFOIL run"
-    def __init__(self, x = None, z = None, af_path = None, Re = 1e5, Ma = 0.03, alpha = [], C_l = [],
+    def __init__(self, x = None, z = None, af_path = None, Re = 1e5, Ma = 0.03, alpha = [], CL = [], 
+                 iter = 50, panels = None, # solver options
                  clean = False, run_path = "./run/pyxfoil", xfoil_path = "./bin/xfoil",
-                 verbose = False):
+                 name = None, verbose = False, timeout = None):
 
         # check how the airfoil is being generated
         if af_path: # defined by airfoil data file
             self.name = open(af_path,"r").readline().strip()
             x, z = np.loadtxt(af_path, skiprows=1, unpack=True)
+            
+        if name:
+            self.name = name
         else:
             self.name = "pyXFOIL Airfoil"
-        
         
         self.x = x
         self.z = z
@@ -33,19 +36,33 @@ class PyXFOIL:
         self.Re = Re
         self.Ma = Ma
         self.alpha = alpha
-        self.C_l = C_l
+        self.CL = CL
+        
+        self.iter = iter
+        self.panels = panels
+        
         self.clean = clean
         self.run_path = run_path
+        case_path = f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}"
+        self.case_path = case_path
+        self.polar_path = f"{case_path}/polar"
+        self.cpdir_path = f"{case_path}/cp"
+        self.bldir_path = f"{case_path}/bl"
+        self.log_path = f"{case_path}/log.log"
         self.xfoil_path = str(pathlib.Path(xfoil_path).absolute())
         
-  
         self.polar_loaded = False
         self.verbose = verbose
+        self.timeout = timeout
 
     def run(self):
         x = self.x
         z = self.z
+        Re = self.Re
+        Ma = self.Ma
         run_path = self.run_path
+        case_path = self.case_path
+        panels = self.panels
         
         if not os.path.exists(run_path): # create the run path if it doesn't exist already
             os.makedirs(run_path)
@@ -63,41 +80,46 @@ class PyXFOIL:
             file.write('\n')
             
         # create input files
-        Re = self.Re
-        Ma = self.Ma
-        pathlib.Path(f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}/cp").mkdir(parents=True, exist_ok = True)
-        input = f"""plop
+        for f in ["cp", "bl"]:
+            try:
+                os.makedirs(f"{case_path}/{f}")
+            except:
+                pass
+
+        input = """plop
 g f
 
 load ../af.dat
-oper 
+"""
+        if panels:
+            input += f"ppar\nn {panels:g}\n\n\n"
+        input += f"""oper 
 v {Re}
 m {Ma}
-iter 50
+iter {self.iter:g}
 pacc
 polar
 .bl
 """
         for alpha in self.alpha:
-            input += (f"a {alpha:2.3f}\ncpwr ./cp/a{alpha:2.3f}\n")
-        # input+="init\n"
-        for C_l in self.C_l:
-            input += (f"CL {C_l:2.3f}\ncpwr ./cp/CL{C_l:2.3f}\n")
+            input += (f"a {alpha:2.3f}\ncpwr ./cp/a{alpha:2.3f}\ndump ./bl/a{alpha:2.3f}\n")
+        
+        for CL in self.CL:
+            input += (f"CL {CL:2.3f}\ncpwr ./cp/CL{CL:2.3f}\ndump ./bl/CL{CL:2.3f}\n")
             
         input += "\n\n\n\nquit"
-        # print(input)
-        sp = subprocess.Popen(self.xfoil_path, cwd = f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}",
+        
+        if self.verbose:
+            stdout = open(f"{case_path}/log.log","w")
+        else:
+            stdout = subprocess.DEVNULL
+        
+        sp = subprocess.Popen(self.xfoil_path, cwd = f"{case_path}",
                                 stdin=subprocess.PIPE,
-                                stdout=open(f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}/log.log","w"),
+                                stdout=stdout,
                                 stderr=subprocess.DEVNULL,
                                 )
-        sp.communicate(input.encode("utf-8"))
-        
-        
-        
-        self.polar_path = f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}/polar"
-        self.cpdir_path = f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}/cp"
-        self.log_path = f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}/log.log"
+        sp.communicate(input.encode("utf-8"), timeout = self.timeout)
         
         if self.verbose:
             fig, (ax1, ax2) = plt.subplots(2,1, figsize = [5,5], gridspec_kw={'height_ratios': [7,1]})
@@ -120,10 +142,12 @@ polar
             fig.tight_layout()
             fig.savefig(f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}/cp.png")
             plt.close(fig)
-        
+    
     def get_polar(self):
         # alpha, CL, CD, CDp, CM, Top_Xtr, Bot_Xtr, Top_Itr, Bot_Itr
-        if not self.polar_loaded:
+        try:
+            return self.polar
+        except:
             with open(self.polar_path, "r") as file: # check to see if any results converged
                 [next(file) for _ in range(12)]
                 if len(next(file, "")) == 0:
@@ -135,6 +159,21 @@ polar
                                         np.loadtxt(self.polar_path, skiprows = 12, unpack = True)))
                     return self.polar
     
+    def get_vsx(self, alpha = None, CL = None):
+        if alpha:
+            fname = f"a{alpha:.3f}"
+        elif CL:
+            fname = f"CL{CL:.3f}"
+        #      x          Cp  
+        #    s        x        y     Ue/Vinf    Dstar     Theta      Cf       H       H*        P         m          K          tau         Di
+        cp_data = np.loadtxt(f"{self.cpdir_path}/{fname}", skiprows = 1, unpack = True)
+        bl_data = np.loadtxt(open(f"{self.bldir_path}/{fname}","r").readlines()[1:(len(cp_data[0])+1)], unpack = True, usecols=range(3, 11))
+        vx = dict(
+            zip(("x", "Cp", "Ue/Vinf", "Dstar", "Theta", "Cf", "H", "H*", "P", "m", "K"),
+                            np.concatenate([cp_data,bl_data]))
+            )
+        return vx
+        
     # def plot_Cp(self, cases = None, labels = None, linestyles = None):
     def plot_Cp(self, cases = None):
         
@@ -153,7 +192,6 @@ polar
                 x, Cp = np.loadtxt(cp_path, unpack = True, skiprows = 1)
                 ax1.plot(x, Cp)
 
-        # ax1.legend()
         ax1.set_xlabel("x/c")
         ax1.set_ylabel("C_p")
         ax1.spines['bottom'].set_position('zero')
@@ -165,25 +203,28 @@ polar
 
         return fig, [ax1, ax2]
     
-    
-    def bend(self):
-        input = f"""plop
-g f
+#     def bend(self):
+#         input = f"""plop
+# g f
 
-load af.dat
-bend
+# load af.dat
+# bend
 
-quit
-"""
-        sp = subprocess.Popen(self.xfoil_path, cwd = f"{self.run_path}",
-                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        out,_ = sp.communicate(input.encode("utf-8"))
-        outlist = out.decode("utf-8").splitlines()
-        return outlist[-7]
-        
+# quit
+# """
+#         sp = subprocess.Popen(self.xfoil_path, cwd = f"{self.run_path}",
+#                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+#         out,_ = sp.communicate(input.encode("utf-8"))
+#         outlist = out.decode("utf-8").splitlines()
+#         return outlist[-7]
+
+
+class XFOILCase(PyXFOIL):
+    pass
+
 if __name__ == "__main__":
     # get XFOIL result
     case1 = PyXFOIL(af_path = "/home/canativi/Documents/optTURNS/safe/Dec/gen0_small/clarky.dat",
-                    Re = 1e5, Ma = 0.03, alpha = np.linspace(0,10,21), C_l = [],
+                    Re = 1e5, Ma = 0.03, alpha = np.linspace(0,10,21), CL = [],
                  clean = True, run_path = "./run/pyxfoil", xfoil_path = "./bin/xfoil")
     case1.run()
