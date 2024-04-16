@@ -167,9 +167,9 @@ polar
         #      x          Cp  
         #    s        x        y     Ue/Vinf    Dstar     Theta      Cf       H       H*        P         m          K          tau         Di
         cp_data = np.loadtxt(f"{self.cpdir_path}/{fname}", skiprows = 1, unpack = True)
-        bl_data = np.loadtxt(open(f"{self.bldir_path}/{fname}","r").readlines()[1:(len(cp_data[0])+1)], unpack = True, usecols=range(3, 11))
+        bl_data = np.loadtxt(open(f"{self.bldir_path}/{fname}","r").readlines()[1:(len(cp_data[0])+1)], unpack = True, usecols=range(3, 7))
         vx = dict(
-            zip(("x", "Cp", "Ue/Vinf", "Dstar", "Theta", "Cf", "H", "H*", "P", "m", "K"),
+            zip(("x", "Cp", "Ue/Vinf", "Dstar", "Theta", "Cf", "H"), # , "H*", "P", "m", "K"
                             np.concatenate([cp_data,bl_data]))
             )
         return vx
