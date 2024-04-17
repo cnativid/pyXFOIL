@@ -64,14 +64,10 @@ class PyXFOIL:
         case_path = self.case_path
         panels = self.panels
         
-        if not os.path.exists(run_path): # create the run path if it doesn't exist already
-            os.system(f"mkdir {run_path}")
-        else: # see if we want to remove all the cases
-            if self.clean == True:
-                os.system(f"rm -rf {run_path}")
-                os.system(f"mkdir {run_path}")
-            else:
-                raise Exception("Solution files already exist. Set clean == True to overwrite.")
+        try:
+            shutil.rmtree(run_path)
+        finally:
+            os.makedirs(run_path)
             
         # copy airfoil file 
         with open(f"{run_path}/af.dat", "w") as file:
@@ -130,14 +126,20 @@ polar
         case_path = self.case_path
         panels = self.panels
         
-        if not os.path.exists(run_path): # create the run path if it doesn't exist already
-            os.system(f"mkdir {run_path}")
-        else: # see if we want to remove all the cases
-            if self.clean == True:
-                os.system(f"rm -rf {run_path}")
-                os.system(f"mkdir {run_path}")
-            else:
-                raise Exception("Solution files already exist. Set clean == True to overwrite.")
+        # if not os.path.exists(run_path): # create the run path if it doesn't exist already
+        #     os.system(f"mkdir {run_path}")
+        # else: # see if we want to remove all the cases
+        #     if self.clean == True:
+        #         os.system(f"rm -rf {run_path}")
+        #         os.system(f"mkdir {run_path}")
+        #     else:
+        #         raise Exception("Solution files already exist. Set clean == True to overwrite.")
+        
+        try:
+            shutil.rmtree(run_path)
+        finally:
+            os.makedirs(run_path)
+            
             
         # copy airfoil file 
         with open(f"{run_path}/af.dat", "w") as file:
@@ -198,7 +200,7 @@ aseq 0 20 1
                 return {}
             else:
                 self.polar_loaded = True        
-                polar_data = np.loadtxt(self.polar_path, skiprows = 12, unpack = True)
+                # polar_data = np.loadtxt(self.polar_path, skiprows = 12, unpack = True)
                 self.polar = dict(zip(("alpha", "CL", "CD", "CDp", "CM", "Top_Xtr", "Bot_Xtr", "Top_Itr", "Bot_Itr"),
                                     np.loadtxt(self.polar_path, skiprows = 12, unpack = True)))
                 return self.polar
