@@ -65,11 +65,11 @@ class PyXFOIL:
         panels = self.panels
         
         if not os.path.exists(run_path): # create the run path if it doesn't exist already
-            os.makedirs(run_path)
+            os.system(f"mkdir {run_path}")
         else: # see if we want to remove all the cases
             if self.clean == True:
-                shutil.rmtree(run_path) # not great solution, needs better
-                os.makedirs(run_path)
+                os.system(f"rm -rf {run_path}")
+                os.system(f"mkdir {run_path}")
             else:
                 raise Exception("Solution files already exist. Set clean == True to overwrite.")
             
@@ -120,44 +120,88 @@ polar
                                 stderr=subprocess.DEVNULL,
                                 )
         sp.communicate(input.encode("utf-8"), timeout = self.timeout)
+    
+    def CL_max(self):
+        x = self.x
+        z = self.z
+        Re = self.Re
+        Ma = self.Ma
+        run_path = self.run_path
+        case_path = self.case_path
+        panels = self.panels
+        
+        if not os.path.exists(run_path): # create the run path if it doesn't exist already
+            os.system(f"mkdir {run_path}")
+        else: # see if we want to remove all the cases
+            if self.clean == True:
+                os.system(f"rm -rf {run_path}")
+                os.system(f"mkdir {run_path}")
+            else:
+                raise Exception("Solution files already exist. Set clean == True to overwrite.")
+            
+        # copy airfoil file 
+        with open(f"{run_path}/af.dat", "w") as file:
+            file.write(self.name)
+            file.writelines([f"\n{x} {z}" for (x, z) in zip(x, z)])
+            file.write('\n')
+            
+        # create input files
+        for f in ["cp", "bl"]:
+            try:
+                os.makedirs(f"{case_path}/{f}")
+            except:
+                pass
+
+        input = """plop
+g f
+
+load ../af.dat
+"""
+        if panels:
+            input += f"ppar\nn {panels:g}\n\n\n"
+        input += f"""oper 
+v {Re}
+m {Ma}
+iter {self.iter:g}
+pacc
+polar
+.bl
+aseq 0 20 1
+\n\n\n\nquit"
+"""
         
         if self.verbose:
-            fig, (ax1, ax2) = plt.subplots(2,1, figsize = [5,5], gridspec_kw={'height_ratios': [7,1]})
-            ax2.axis("equal")
-            ax2.plot(self.x,self.z, 'k')
-            ax2.fill_between(self.xtop, self.ztop, self.zbot, alpha = 0.3)
-            ax1.invert_yaxis()
-            
-            for cp_path in [f"{self.cpdir_path}/{case}" for case in os.listdir(self.cpdir_path)]:
-                x, Cp = np.loadtxt(cp_path, unpack = True, skiprows = 1)
-                ax1.plot(x, Cp)
-
-            ax1.set_xlabel("x/c")
-            ax1.set_ylabel("C_p")
-            ax1.spines['bottom'].set_position('zero')
-            ax1.spines[['right', 'top']].set_visible(False)
-            ax2.set_axis_off()
-            fig.subplots_adjust(hspace=0)
-            ax1.title.set_text("C_p vs x/c")
-            fig.tight_layout()
-            fig.savefig(f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}/cp.png")
-            plt.close(fig)
+            stdout = open(f"{case_path}/log.log","w")
+        else:
+            stdout = subprocess.DEVNULL
+        
+        sp = subprocess.Popen(self.xfoil_path, cwd = f"{case_path}",
+                                stdin=subprocess.PIPE,
+                                stdout=stdout,
+                                stderr=subprocess.DEVNULL,
+                                )
+        sp.communicate(input.encode("utf-8"), timeout = self.timeout)
+        
+        polar = self.get_polar()
+        idx = np.argmax(polar["CL"])
+        return  polar["CL"][idx], polar["alpha"][idx]
+    
     
     def get_polar(self):
         # alpha, CL, CD, CDp, CM, Top_Xtr, Bot_Xtr, Top_Itr, Bot_Itr
-        try:
-            return self.polar
-        except:
-            with open(self.polar_path, "r") as file: # check to see if any results converged
-                [next(file) for _ in range(12)]
-                if len(next(file, "")) == 0:
-                    return {}
-                else:
-                    self.polar_loaded = True        
-                    polar_data = np.loadtxt(self.polar_path, skiprows = 12, unpack = True)
-                    self.polar = dict(zip(("alpha", "CL", "CD", "CDp", "CM", "Top_Xtr", "Bot_Xtr", "Top_Itr", "Bot_Itr"),
-                                        np.loadtxt(self.polar_path, skiprows = 12, unpack = True)))
-                    return self.polar
+        # try:
+        #     return self.polar
+        # except:
+        with open(self.polar_path, "r") as file: # check to see if any results converged
+            [next(file) for _ in range(12)]
+            if len(next(file, "")) == 0:
+                return {}
+            else:
+                self.polar_loaded = True        
+                polar_data = np.loadtxt(self.polar_path, skiprows = 12, unpack = True)
+                self.polar = dict(zip(("alpha", "CL", "CD", "CDp", "CM", "Top_Xtr", "Bot_Xtr", "Top_Itr", "Bot_Itr"),
+                                    np.loadtxt(self.polar_path, skiprows = 12, unpack = True)))
+                return self.polar
     
     def get_vsx(self, alpha = None, CL = None):
         if alpha:
@@ -175,33 +219,33 @@ polar
         return vx
         
     # def plot_Cp(self, cases = None, labels = None, linestyles = None):
-    def plot_Cp(self, cases = None):
+    # def plot_Cp(self, cases = None):
         
-        fig, (ax1, ax2) = plt.subplots(2,1, figsize = [5,5], gridspec_kw={'height_ratios': [7,1]})
-        ax2.axis("equal")
-        ax2.plot(self.x,self.z, 'k')
-        ax2.fill_between(self.xtop, self.ztop, self.zbot, alpha = 0.3)
-        ax1.invert_yaxis()
+    #     fig, (ax1, ax2) = plt.subplots(2,1, figsize = [5,5], gridspec_kw={'height_ratios': [7,1]})
+    #     ax2.axis("equal")
+    #     ax2.plot(self.x,self.z, 'k')
+    #     ax2.fill_between(self.xtop, self.ztop, self.zbot, alpha = 0.3)
+    #     ax1.invert_yaxis()
         
-        if not cases:
-            for cp_path in [f"{self.cpdir_path}/{case}" for case in os.listdir(self.cpdir_path)]:
-                x, Cp = np.loadtxt(cp_path, unpack = True, skiprows = 1)
-                ax1.plot(x, Cp)
-        else:
-            for cp_path in [f"{self.cpdir_path}/{case}" for case in cases]:
-                x, Cp = np.loadtxt(cp_path, unpack = True, skiprows = 1)
-                ax1.plot(x, Cp)
+    #     if not cases:
+    #         for cp_path in [f"{self.cpdir_path}/{case}" for case in os.listdir(self.cpdir_path)]:
+    #             x, Cp = np.loadtxt(cp_path, unpack = True, skiprows = 1)
+    #             ax1.plot(x, Cp)
+    #     else:
+    #         for cp_path in [f"{self.cpdir_path}/{case}" for case in cases]:
+    #             x, Cp = np.loadtxt(cp_path, unpack = True, skiprows = 1)
+    #             ax1.plot(x, Cp)
 
-        ax1.set_xlabel("x/c")
-        ax1.set_ylabel("C_p")
-        ax1.spines['bottom'].set_position('zero')
-        ax1.spines[['right', 'top']].set_visible(False)
-        ax2.set_axis_off()
-        plt.subplots_adjust(hspace=0)
-        ax1.title.set_text("C_p vs x/c")
-        plt.tight_layout()
+    #     ax1.set_xlabel("x/c")
+    #     ax1.set_ylabel("C_p")
+    #     ax1.spines['bottom'].set_position('zero')
+    #     ax1.spines[['right', 'top']].set_visible(False)
+    #     ax2.set_axis_off()
+    #     plt.subplots_adjust(hspace=0)
+    #     ax1.title.set_text("C_p vs x/c")
+    #     plt.tight_layout()
 
-        return fig, [ax1, ax2]
+    #     return fig, [ax1, ax2]
     
 #     def bend(self):
 #         input = f"""plop
