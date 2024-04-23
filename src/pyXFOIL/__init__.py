@@ -66,14 +66,20 @@ class PyXFOIL:
         
         try:
             shutil.rmtree(run_path)
-        finally:
-            os.makedirs(run_path)
+        except:
+            pass
+        os.makedirs(run_path)
             
         # copy airfoil file 
         with open(f"{run_path}/af.dat", "w") as file:
             file.write(self.name)
             file.writelines([f"\n{x} {z}" for (x, z) in zip(x, z)])
             file.write('\n')
+        
+        if self.verbose:
+            plt.plot(x,z)
+            plt.savefig(f"{run_path}/af.png")
+            plt.close()
             
         # create input files
         for f in ["cp", "bl"]:
@@ -136,9 +142,12 @@ polar
         #         raise Exception("Solution files already exist. Set clean == True to overwrite.")
         
         try:
+            print("Removing existing run_path")
             shutil.rmtree(run_path)
-        finally:
-            os.makedirs(run_path)
+        except:
+            print("Did not find existing run_path, creating one now.")
+            pass
+        os.makedirs(run_path)
             
             
         # copy airfoil file 
