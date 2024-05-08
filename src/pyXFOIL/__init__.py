@@ -1,5 +1,5 @@
 import numpy as np
-import os, shutil, pathlib, subprocess, dask
+import os, shutil, pathlib, subprocess
 import matplotlib.pyplot as plt
 # plt.style.use("https://raw.githubusercontent.com/cnativid/MPL-Styles/main/default.mplstyle")
 
@@ -7,7 +7,7 @@ class PyXFOIL:
     "Class for an XFOIL run"
     def __init__(self, x = None, z = None, af_path = None, Re = 1e5, Ma = 0.03, alpha = [], CL = [], 
                  iter = 50, panels = None, # solver options
-                 clean = False, run_path = "./run/pyxfoil", xfoil_path = "./bin/xfoil",
+                 clean = False, run_path = "./run/pyxfoil", xfoil_path = "./bin/xfoil", case_name = None,
                  name = None, verbose = False, timeout = None):
 
         # check how the airfoil is being generated
@@ -43,7 +43,10 @@ class PyXFOIL:
         
         self.clean = clean
         self.run_path = run_path
-        case_path = f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}"
+        if case_name:
+            case_path = f"{run_path}/{case_name}"
+        else:
+            case_path = f"{run_path}/Re{Re:1.3e}_Ma{Ma:.3f}"
         self.case_path = case_path
         self.polar_path = f"{case_path}/polar"
         self.cpdir_path = f"{case_path}/cp"
@@ -132,22 +135,8 @@ polar
         case_path = self.case_path
         panels = self.panels
         
-        # if not os.path.exists(run_path): # create the run path if it doesn't exist already
-        #     os.system(f"mkdir {run_path}")
-        # else: # see if we want to remove all the cases
-        #     if self.clean == True:
-        #         os.system(f"rm -rf {run_path}")
-        #         os.system(f"mkdir {run_path}")
-        #     else:
-        #         raise Exception("Solution files already exist. Set clean == True to overwrite.")
-        
-        try:
-            print("Removing existing run_path")
-            shutil.rmtree(run_path)
-        except:
-            print("Did not find existing run_path, creating one now.")
-            pass
-        os.makedirs(run_path)
+        os.system(f"rm -rfv {case_path}")
+        os.system(f"mkdir -pv {run_path}")
             
             
         # copy airfoil file 
