@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 inflow_c = 0
 
 def CL_lookup(alpha):
-    # return (np.pi**2)*(alpha)/90
-    return 5.73*alpha*np.pi/180
+    return (np.pi**2)*(alpha)/90
 
 def solve_inflow(solidity, r, collective_deg):
     if r == 0:
@@ -33,14 +32,14 @@ def eval_C_T(collective_deg, solidity):
 def solve_rotor(C_T, solidity):
     collective_deg = 0
     res = 1
-    while res > 1e-7:
+    while res > 1e-5:
         res = C_T - eval_C_T(collective_deg, solidity)
         print(collective_deg,res)
-        collective_deg += 1000*res
+        collective_deg += 100*res
     return collective_deg
 
-C_T = 0.02/2
-solidity = 0.10610329539459687
+C_T = 0.008
+solidity = 0.1
 collective_deg = solve_rotor(C_T, solidity)
 r_array = np.linspace(0,1,141)
 inflow = [solve_inflow(solidity, r, collective_deg) for r in r_array]
@@ -50,6 +49,5 @@ plt.xlabel("r/R")
 plt.xlabel("inflow ratio")
 plt.title("C_T = 0.008, solidity = 0.1")
 plt.savefig("test.png")
-print(collective_deg)
 plt.show()
     
